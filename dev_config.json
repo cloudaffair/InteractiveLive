@@ -1,0 +1,17 @@
+{
+  "dependencies": {
+    "elementallive":[
+      {
+        "client_id" :"Devel",
+        "elemental_live_url":"",
+        "key":"",
+        "username":""
+      }
+    ],
+    "elastic_server":[
+      "http://xxxx:9200"
+      ],
+    "port":"9090",
+    "environment":"dev"
+  }
+}
