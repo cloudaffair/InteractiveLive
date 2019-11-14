@@ -16,6 +16,7 @@ import (
 	"strings"
 	"strconv"
 	"bytes"
+	"medialive"
 )
 
 const HealthZStatusOK                = "OK"
@@ -79,20 +80,22 @@ func (h *Handler) HandleOpinionRequest(ctx context.Context) error {
 
 	fmt.Println( "Opinion request ", opinion)
 
-	partner := "elemental_live"
-
-	fmt.Println("Partner requested  ", partner)
-
-	switch partner {
+	switch opinion.Partner {
 	case "elemental_live":
 		response, err := elementallive.HandleOpinionRequest(ctx, opinion, config)
 		if err != nil {
 			return common.HttpErrorfCode(http.StatusInternalServerError, 8001, "%s", err)
 		}
 		c.JSON(http.StatusCreated, response)
+	case "media_live":
+		response, err := medialive.HandleOpinionRequest(ctx, opinion, config)
+		if err != nil {
+			return common.HttpErrorfCode(http.StatusInternalServerError, 8001, "%s", err)
+		}
+		c.JSON(http.StatusCreated, response)
 	default:
-		fmt.Errorf("Unknown partner  ", partner)
-		return common.HttpErrorfCode(http.StatusBadRequest, 8001, "%s", "Unknown partner", partner)
+		fmt.Errorf("Unknown partner  ", opinion.Partner)
+		return common.HttpErrorfCode(http.StatusBadRequest, 8001, "%s", "Unknown partner", opinion.Partner)
 	}
 
 	return nil

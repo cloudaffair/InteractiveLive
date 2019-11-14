@@ -11,7 +11,8 @@ type Opinion struct {
 	Values           interface{} `json:"values"`
 	ServiceUrl       string      `json:"service_url"`
 	SegmentLength    uint64       `json:"segment_length,omitempty"`
-	ElementalDeployment       string      `json:"elemental_deployment,omitempty"`
+	Partner			 string      `json:"partner,omitempty"`
+	Deployment       string      `json:"deployment,omitempty"`
 	EventId			 string      `json:"event_id,omitempty"`
 	PollType		 string	     `json:"poll_type"`
 }

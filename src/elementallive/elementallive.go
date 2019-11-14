@@ -4,7 +4,6 @@ import (
 	"context"
 	"model"
 	"common"
-	"github.com/rs/xid"
 	"encoding/base64"
 	"time"
 	"github.com/jasonlvhit/gocron"
@@ -16,8 +15,6 @@ import (
 	"io"
 	"github.com/clbanning/mxj"
 	"encoding/json"
-	"os"
-	"net"
 )
 
 const(
@@ -27,7 +24,7 @@ const(
 )
 
 func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *common.Config) (model.OpinionResponse, error) {
-	elementalDeployment := opinion.ElementalDeployment
+	elementalDeployment := opinion.Deployment
 
 	var elementalLive string
 	var key string
@@ -56,33 +53,16 @@ func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *comm
 		return opinionResponse, common.NewError("Elemental deployment info missing in configuration")
 	}
 
-	var OpinionToBurn= model.OpinionBurnData{}
-	opinionId := xid.New().String()
-	OpinionToBurn.OpinionId = opinionId
-	OpinionToBurn.Text = opinion.Text
-	OpinionToBurn.ServiceUrl = opinion.ServiceUrl
-	OpinionToBurn.Values = opinion.Values
-	OpinionToBurn.PollType = opinion.PollType
-
 	env := config.Dependencies["environment"].(string)
-	domain_name := ""
-	if (env != "dev") {
-		aws_url := "http://169.254.169.254/latest/meta-data/public-hostname"
-		hd := make(http.Header)
-		content, _, err := common.HttpSubmitData(c, "GET", aws_url, &hd, nil)
-		if (err == nil) {
-			domain_name = string(content)
-		}
-	} else {
-		hostname, _ := os.Hostname()
-		addrs, _ := net.LookupHost(hostname)
-		fmt.Println("addrs ", addrs)
-		domain_name = addrs[0]
+
+	OpinionToBurn, err := common.GetOpinionToBurn(c, opinion, port, env)
+
+	if err != nil {
+		return opinionResponse, common.NewError("Error while computing the opinion to burn")
 	}
-	OpinionToBurn.ServiceUrl = "http://" + domain_name +":" + port + "/v1/opinion/" + OpinionToBurn.OpinionId +  "/feedback"
 
 	go scheduleID3Inserts(c, OpinionToBurn, opinion.SegmentLength, elementalLive, opinion.EventId, key, username, opinion.StartTime, opinion.EndTime)
-	opinionResponse.OpinionId = opinionId
+	opinionResponse.OpinionId = OpinionToBurn.OpinionId
 	return opinionResponse, nil
 }
 
@@ -105,10 +85,10 @@ func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.Opi
 	}
 
 	fmt.Printf("%s", "Stringified ID3 data ", string(id3Value))
-	id3Tag := GetId3Tag(ID3_FIELD, ID3_DESCRIPTION, string(id3Value))
+	id3Tag := common.GetId3Tag(string(id3Value))
 	base64Id3 := base64.StdEncoding.EncodeToString(id3Tag)
 
-	fmt.Printf( "Base64 Encoded ID3 content ", base64Id3)
+	fmt.Println( "Base64 Encoded ID3 content ", base64Id3)
 
 	path := "/live_events/" + eventId + "/timed_metadata"
 
