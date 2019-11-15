@@ -6,7 +6,6 @@ import (
 	"time"
 	"model"
 	"fmt"
-	"github.com/jasonlvhit/gocron"
 	"encoding/json"
 	"encoding/base64"
 	"github.com/aws/aws-sdk-go/aws"
@@ -59,47 +58,33 @@ func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *comm
 	return opinionResponse, nil
 }
 
-func scheduleID3Inserts(c context.Context, OpinionToBurn model.OpinionBurnData, burnInterval uint64, elementalLive string, eventId string, key string, username string, startTime time.Time, endTime time.Time) {
-	jt := NewJobTicker(startTime)
-	for {
-		<-jt.t.C
-		fmt.Println(time.Now(), "- ticked")
-		jt.t.Stop()
-		// Schedule further jobs for the defined burn interval periodically ...
-		s := gocron.NewScheduler()
-		s.Every(burnInterval).Seconds().Do(writeID3Tag, c, s, OpinionToBurn, elementalLive, eventId, key, username, endTime, burnInterval)
-		<- s.Start()
-	}
-}
-
-func NewJobTicker(jobStartTime time.Time) jobTicker {
-	return jobTicker{time.NewTimer(getNextTickDuration(jobStartTime))}
-}
-
-type jobTicker struct {
-	t *time.Timer
-}
-
-func getNextTickDuration(jobStartTime time.Time) time.Duration {
+func scheduleID3Inserts(c context.Context, OpinionToBurn model.OpinionBurnData, burnInterval int, elementalLive string, eventId string, key string, username string, startTime time.Time, endTime time.Time) {
 	now := time.Now().UTC()
-	if now.After(jobStartTime) {
-		fmt.Println("%s", "Start time already expired, nothing to schedule for start time; returning")
-		return 0
+	if now.After(startTime) {
+		fmt.Println("%s", "Start time already expired, nothing to schedule for start time; schedule for future")
+		startTime = time.Now().UTC()
+	} else {
+		// Schedule one for the start time
+		writeID3Tag (c, startTime, OpinionToBurn, elementalLive, eventId, key, username)
 	}
-	return jobStartTime.Sub(now)
+
+	var lastSetTime = startTime
+	for lastSetTime.Before(endTime) {
+		var nextEpochTime = (lastSetTime.Unix())+(int64(burnInterval))
+		lastSetTime = time.Unix(nextEpochTime, 0).UTC()
+		if endTime.Sub(time.Now().UTC()).Seconds() <= float64(burnInterval) {
+			fmt.Printf("Probably the last ID3 to burn for ", OpinionToBurn.OpinionId, ";Setting poll as false")
+			OpinionToBurn.OpinionStart = false
+		} else {
+			OpinionToBurn.OpinionStart = true
+		}
+
+		writeID3Tag (c, lastSetTime, OpinionToBurn, elementalLive, eventId, key, username)
+	}
 }
 
-func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.OpinionBurnData, mediaLive string, eventId string, key string, secret string, endTime time.Time, burnInterval uint64) {
+func writeID3Tag(c context.Context, t time.Time, OpinionToBurn model.OpinionBurnData, mediaLive string, eventId string, key string, secret string) {
 	OpinionToBurn.OpinionStart = true
-
-	if time.Now().UTC().After(endTime) {
-		fmt.Printf("Timer expired for", OpinionToBurn.OpinionId, ", Returning")
-		s.Clear()
-		return
-	} else if endTime.Sub(time.Now().UTC()).Seconds() <= float64(burnInterval) {
-		fmt.Printf("Probably the last ID3 to burn for ", OpinionToBurn.OpinionId, ";Setting poll as false")
-		OpinionToBurn.OpinionStart = false
-	}
 
 	id3Value, err := json.Marshal(OpinionToBurn)
 	if err != nil {
@@ -121,6 +106,10 @@ func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.Opi
 		fmt.Errorf( "%s", "error creating AWS session", err)
 		return
 	}
+	time := fmt.Sprintf("%d-%02d-%02dT%02d:%02d:%02d.000Z",
+		t.Year(), t.Month(), t.Day(),
+		t.Hour(), t.Minute(), t.Second())
+
 	// Create a MediaLive client from just a session.
 	client := medialive.New(sess)
 
@@ -131,11 +120,6 @@ func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.Opi
 	scheduleActionSettings.SetHlsTimedMetadataSettings(&hlsTimedMetaScheduleActionSettings)
 
 	fixedModeScheduleActionStartSettings := medialive.FixedModeScheduleActionStartSettings{}
-	t := time.Now().UTC()
-
-	time := fmt.Sprintf("%d-%02d-%02dT%02d:%02d:%02d.000Z",
-		t.Year(), t.Month(), t.Day(),
-		t.Hour(), t.Minute(), t.Second())
 
 	fixedModeScheduleActionStartSettings.SetTime(time)
 

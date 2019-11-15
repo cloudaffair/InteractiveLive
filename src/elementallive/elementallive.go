@@ -8,8 +8,6 @@ import (
 	"time"
 	"github.com/jasonlvhit/gocron"
 	"fmt"
-	"bytes"
-	"encoding/binary"
 	"net/http"
 	"crypto/md5"
 	"io"
@@ -66,7 +64,7 @@ func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *comm
 	return opinionResponse, nil
 }
 
-func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.OpinionBurnData, elementalLive string, eventId string, key string, username string, endTime time.Time, burnInterval uint64){
+func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.OpinionBurnData, elementalLive string, eventId string, key string, username string, endTime time.Time, burnInterval int){
 
 	OpinionToBurn.OpinionStart = true
 
@@ -145,57 +143,7 @@ var getExpiresTime = func() string {
 	return fmt.Sprintf("%d", time.Now().Unix()+3000)
 }
 
-func GetId3Tag(field string, desc string, value string) []byte {
-	var id3 bytes.Buffer
-
-	id3.WriteString("ID3")
-	id3.WriteByte(0x04) // version
-	id3.WriteByte(0x00)
-
-	id3.WriteByte(0x00) // flags
-
-	id3.Write(getID3Field(field, desc, value))
-
-	return id3.Bytes()
-}
-
-func getID3Field(field string, desc string, value string) []byte {
-	switch field {
-	case "TXXX":
-		return getTXXXField(desc, value)
-	}
-
-	var fBuf bytes.Buffer
-	binary.Write(&fBuf, binary.BigEndian, uint32(0)) // size
-	return fBuf.Bytes()
-}
-
-func getTXXXField(desc string, value string) []byte {
-
-	var txxx bytes.Buffer
-
-	txxx.WriteString("TXXX")
-
-	var size uint32
-	size = uint32(1 + len(desc) + 1 + len(value) + 1)
-	binary.Write(&txxx, binary.BigEndian, size)      // size
-	binary.Write(&txxx, binary.BigEndian, uint16(0)) // flags
-
-	txxx.WriteByte(ENCODING_UTF8)
-
-	txxx.WriteString(desc)
-	txxx.WriteByte(0)
-
-	txxx.WriteString(value)
-	txxx.WriteByte(0)
-
-	var frame bytes.Buffer
-	binary.Write(&frame, binary.BigEndian, uint32(txxx.Len()))
-	frame.Write(txxx.Bytes())
-	return frame.Bytes()
-}
-
-func scheduleID3Inserts(c context.Context, OpinionToBurn model.OpinionBurnData, burnInterval uint64, elementalLive string, eventId string, key string, username string, startTime time.Time, endTime time.Time) {
+func scheduleID3Inserts(c context.Context, OpinionToBurn model.OpinionBurnData, burnInterval int, elementalLive string, eventId string, key string, username string, startTime time.Time, endTime time.Time) {
 	jt := NewJobTicker(startTime)
 	for {
 		<-jt.t.C
@@ -203,7 +151,7 @@ func scheduleID3Inserts(c context.Context, OpinionToBurn model.OpinionBurnData, 
 		jt.t.Stop()
 		// Schedule further jobs for the defined burn interval periodically ...
 		s := gocron.NewScheduler()
-		s.Every(burnInterval).Seconds().Do(writeID3Tag, c, s, OpinionToBurn, elementalLive, eventId, key, username, endTime, burnInterval)
+		s.Every(uint64(burnInterval)).Seconds().Do(writeID3Tag, c, s, OpinionToBurn, elementalLive, eventId, key, username, endTime, burnInterval)
 		<- s.Start()
 	}
 }
