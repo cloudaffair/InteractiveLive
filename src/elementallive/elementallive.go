@@ -6,7 +6,7 @@ import (
 	"common"
 	"encoding/base64"
 	"time"
-	"github.com/jasonlvhit/gocron"
+	"gocron"
 	"fmt"
 	"net/http"
 	"crypto/md5"
@@ -14,6 +14,8 @@ import (
 	"github.com/clbanning/mxj"
 	"encoding/json"
 )
+
+var schedulers []*gocron.Scheduler
 
 func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *common.Config) (model.OpinionResponse, error) {
 	elementalDeployment := opinion.Deployment
@@ -59,6 +61,28 @@ func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *comm
 }
 
 func DeleteOpinionRequest(c context.Context, opinionId string, config *common.Config, event model.LiveEvent) error {
+	for _,scheduler := range schedulers {
+		jobs := scheduler.Jobs()
+		var opinionFound bool
+		for _, job := range jobs {
+			params := job.Fparams
+			for _,v := range params {
+				// Get the third value from the function arguments which is our opinion Burn data.
+				burndata := v[2].(model.OpinionBurnData)
+				opId := burndata.OpinionId
+				if opinionId == opId{
+					opinionFound = true
+				}
+			}
+		}
+		if opinionFound {
+			fmt.Println("Clearing all future jobs from the schedule;")
+			// Clear all jobs from the scheduler
+			scheduler.Clear()
+		} else {
+			continue
+		}
+	}
 	return nil
 }
 
@@ -79,12 +103,8 @@ func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.Opi
 	if err != nil {
 		return
 	}
-
-	fmt.Printf("%s", "Stringified ID3 data ", string(id3Value))
 	id3Tag := common.GetId3Tag(string(id3Value))
 	base64Id3 := base64.StdEncoding.EncodeToString(id3Tag)
-
-	fmt.Println( "Base64 Encoded ID3 content ", base64Id3)
 
 	path := "/live_events/" + eventId + "/timed_metadata"
 
@@ -95,7 +115,6 @@ func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.Opi
 	// string to be used in initial MD5 hash
 	data_string := fmt.Sprint(path, username, key, expires_string)
 
-	fmt.Printf( "data_string=", data_string)
 	// create initial MD5 hash
 	md5_hash := md5.New()
 	io.WriteString(md5_hash, data_string)
@@ -131,8 +150,6 @@ func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.Opi
 	mapRaw, _ := mxj.NewMapJson(output)
 	newBody, _ := mapRaw.Xml()
 
-	fmt.Println("Request body :", string(newBody))
-
 	content, resp, err := common.HttpSubmitData(c, "POST", reqUrl, &hd, newBody)
 	fmt.Printf("%s", "Http post response ", string(content), resp, err)
 }
@@ -149,6 +166,7 @@ func scheduleID3Inserts(c context.Context, OpinionToBurn model.OpinionBurnData, 
 		jt.t.Stop()
 		// Schedule further jobs for the defined burn interval periodically ...
 		s := gocron.NewScheduler()
+		schedulers = append(schedulers, s)
 		s.Every(uint64(burnInterval)).Seconds().Do(writeID3Tag, c, s, OpinionToBurn, elementalLive, eventId, key, username, endTime, burnInterval)
 		<- s.Start()
 	}
