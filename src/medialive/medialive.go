@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/medialive"
+	"strings"
 )
 
 func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *common.Config) (model.OpinionResponse, error) {
@@ -56,6 +57,72 @@ func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *comm
 	opinionResponse.OpinionId = OpinionToBurn.OpinionId
 
 	return opinionResponse, nil
+}
+
+func DeleteOpinionRequest(c context.Context, opinionId string, config *common.Config, event model.LiveEvent) error {
+
+	var access_key string
+	var secret_key string
+
+	region := event.Deployment
+	eventId := event.EventId
+
+	deps := config.Dependencies["medialive"].([]interface{})
+	if deps != nil && len(deps) > 0 {
+		for _, d := range deps {
+			d := d.(map[string]interface{})
+			if d["region"] == region {
+				access_key = d["access_key"].(string)
+				secret_key = d["secret_key"].(string)
+			}
+		}
+	}
+	fmt.Println( "Deleting opinion request for ", region, eventId, opinionId)
+
+	if region == "" || eventId == "" || access_key == "" || secret_key == "" {
+		return common.NewError("Media Live deployment info missing in configuration")
+	}
+
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(region),
+		Credentials: credentials.NewStaticCredentials(access_key, secret_key, ""),
+	})
+
+	if err != nil {
+		fmt.Errorf("%s", "error creating AWS session", err)
+		return err
+	}
+	// Create a MediaLive client from just a session.
+	client := medialive.New(sess)
+	input := medialive.DescribeScheduleInput{}
+	input.ChannelId = &eventId
+	response, error := client.DescribeSchedule(&input)
+	if error != nil {
+		return error
+	}
+	fmt.Println("Describe schedule response", response)
+
+	var actionNames []*string
+	for _, action := range response.ScheduleActions {
+		if strings.HasPrefix(*action.ActionName, opinionId){
+			actionNames = append(actionNames, action.ActionName)
+		}
+	}
+
+	scheduleActionDeleteRequest := medialive.BatchScheduleActionDeleteRequest{}
+	scheduleActionDeleteRequest.ActionNames = actionNames
+
+	delete_input := medialive.BatchUpdateScheduleInput{}
+	delete_input.SetChannelId(eventId)
+	delete_input.SetDeletes(&scheduleActionDeleteRequest)
+
+	output, error := client.BatchUpdateSchedule(&delete_input)
+	if error != nil {
+		fmt.Errorf("error while deleting scheduled timed metadatas %s", error)
+		return error
+	}
+	fmt.Println("Schedule deleted successfully", output.GoString())
+	return nil
 }
 
 func scheduleID3Inserts(c context.Context, OpinionToBurn model.OpinionBurnData, burnInterval int, elementalLive string, eventId string, key string, username string, startTime time.Time, endTime time.Time) {
@@ -128,7 +195,7 @@ func writeID3Tag(c context.Context, t time.Time, OpinionToBurn model.OpinionBurn
 
 	scheduleAction := medialive.ScheduleAction{}
 	scheduleAction.SetScheduleActionSettings(&scheduleActionSettings)
-	scheduleAction.SetActionName(eventId + "-" +OpinionToBurn.OpinionId + "-" + time)
+	scheduleAction.SetActionName(OpinionToBurn.OpinionId + "-" + time)
 	scheduleAction.SetScheduleActionStartSettings(&scheduleActionStartSettings)
 
 	scheduleActions := []*medialive.ScheduleAction{}

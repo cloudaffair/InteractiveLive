@@ -15,12 +15,6 @@ import (
 	"encoding/json"
 )
 
-const(
- ID3_FIELD = "TXXX"
- ID3_DESCRIPTION = "poll"
- ENCODING_UTF8 = 3
-)
-
 func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *common.Config) (model.OpinionResponse, error) {
 	elementalDeployment := opinion.Deployment
 
@@ -62,6 +56,10 @@ func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *comm
 	go scheduleID3Inserts(c, OpinionToBurn, opinion.SegmentLength, elementalLive, opinion.EventId, key, username, opinion.StartTime, opinion.EndTime)
 	opinionResponse.OpinionId = OpinionToBurn.OpinionId
 	return opinionResponse, nil
+}
+
+func DeleteOpinionRequest(c context.Context, opinionId string, config *common.Config, event model.LiveEvent) error {
+	return nil
 }
 
 func writeID3Tag(c context.Context, s *gocron.Scheduler, OpinionToBurn model.OpinionBurnData, elementalLive string, eventId string, key string, username string, endTime time.Time, burnInterval int){

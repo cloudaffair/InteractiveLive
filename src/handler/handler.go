@@ -19,17 +19,17 @@ import (
 	"medialive"
 )
 
-const HealthZStatusOK                = "OK"
-const HealthZStatusFailed            = "FAILED"
+const HealthZStatusOK = "OK"
+const HealthZStatusFailed = "FAILED"
 
 type Handler struct {
 }
 
 type HealthZResponse struct {
-	Error        string              `json:"error,omitempty"`
-	ServerStatus string              `json:"serverStatus"`
-	Status       string              `json:"status"`
-	TimeStamp    time.Time           `json:"time"`
+	Error        string    `json:"error,omitempty"`
+	ServerStatus string    `json:"serverStatus"`
+	Status       string    `json:"status"`
+	TimeStamp    time.Time `json:"time"`
 }
 
 func NewHandler() *Handler {
@@ -69,16 +69,16 @@ func (h *Handler) ErrorCatch(f func(context.Context) error) gin.HandlerFunc {
 func (h *Handler) HandleOpinionRequest(ctx context.Context) error {
 	c, _ := common.GinContext(ctx)
 
-	config,_ := common.GetConfig()
+	config, _ := common.GetConfig()
 	dataIn, _ := ioutil.ReadAll(c.Request.Body)
 
 	var opinion model.Opinion
 	if err := json.Unmarshal(dataIn, &opinion); err != nil {
-		fmt.Errorf( "Bad Input: %s :%s", err.Error(), string(dataIn))
+		fmt.Errorf("Bad Input: %s :%s", err.Error(), string(dataIn))
 		return common.HttpErrorfCode(400, 8001, "%s", err.Error())
 	}
 
-	fmt.Println( "Opinion request ", opinion)
+	fmt.Println("Opinion request ", opinion)
 
 	switch opinion.Partner {
 	case "elemental_live":
@@ -101,16 +101,51 @@ func (h *Handler) HandleOpinionRequest(ctx context.Context) error {
 	return nil
 }
 
+func (h *Handler) DeleteOpinionRequest(ctx context.Context) error {
+	c, _ := common.GinContext(ctx)
+	config, _ := common.GetConfig()
+	dataIn, _ := ioutil.ReadAll(c.Request.Body)
+
+	opinionId := c.Params.ByName("id")
+	partner := c.Params.ByName("partner")
+
+	var event model.LiveEvent
+	if err := json.Unmarshal(dataIn, &event); err != nil {
+		fmt.Errorf("Bad Input: %s :%s", err.Error(), string(dataIn))
+		return common.HttpErrorfCode(400, 8001, "%s", err.Error())
+	}
+
+	fmt.Println("Opinion request ", event)
+	switch partner {
+	case "elemental_live":
+		err := elementallive.DeleteOpinionRequest(ctx, opinionId, config, event)
+		if err != nil {
+			return common.HttpErrorfCode(http.StatusInternalServerError, 8001, "%s", err)
+		}
+		c.JSON(http.StatusCreated, "Delete initiated")
+	case "media_live":
+		err := medialive.DeleteOpinionRequest(ctx, opinionId, config, event)
+		if err != nil {
+			return common.HttpErrorfCode(http.StatusInternalServerError, 8001, "%s", err)
+		}
+		c.JSON(http.StatusCreated, "Delete initiated")
+	default:
+		fmt.Errorf("Unknown partner  ", partner)
+		return common.HttpErrorfCode(http.StatusBadRequest, 8001, "%s", "Unknown partner", partner)
+	}
+	return nil
+}
+
 func (h *Handler) HandleOpinionFeedbackRequest(ctx context.Context) error {
 	c, _ := common.GinContext(ctx)
 
-	config,_ := common.GetConfig()
+	config, _ := common.GetConfig()
 	elasticServer := config.Dependencies["elastic_server"]
 	dataIn, _ := ioutil.ReadAll(c.Request.Body)
 
 	var feedback model.OpinionFeedback
 	if err := json.Unmarshal(dataIn, &feedback); err != nil {
-		fmt.Errorf( "Bad Input: %s :%s", err.Error(), string(dataIn))
+		fmt.Errorf("Bad Input: %s :%s", err.Error(), string(dataIn))
 		return common.HttpErrorfCode(400, 8001, "%s", err.Error())
 	}
 
@@ -129,7 +164,7 @@ func (h *Handler) HandleOpinionFeedbackRequest(ctx context.Context) error {
 	return nil
 }
 
-func writeToEs(feedback model.OpinionFeedback, opinionId string, elasticServersStr []string){
+func writeToEs(feedback model.OpinionFeedback, opinionId string, elasticServersStr []string) {
 	es, err := es.GetClient(elasticServersStr)
 
 	if err != nil {
@@ -142,9 +177,9 @@ func writeToEs(feedback model.OpinionFeedback, opinionId string, elasticServersS
 	body, _ := json.Marshal(feedback)
 	req := esapi.IndexRequest{
 		Index:      "ila",
-		DocumentID: "ila_" + opinionId + "_"+ strconv.Itoa(int(time.Now().UnixNano())),
+		DocumentID: "ila_" + opinionId + "_" + strconv.Itoa(int(time.Now().UnixNano())),
 		Body:       strings.NewReader(string(body)),
-		Refresh: "true",
+		Refresh:    "true",
 		Pretty:     true,
 		Human:      true,
 		ErrorTrace: true,

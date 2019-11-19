@@ -32,6 +32,8 @@ func (ila *ila) Run(sv *gin.Engine) {
 	simple.GET("/healthz", (hl.ErrorCatch(hl.HandleHealthRequest)))
 	simple.POST("/v1/opinion", (hl.ErrorCatch(hl.HandleOpinionRequest)))
 
+	simple.DELETE("/v1/partner/:partner/opinion/:id", (hl.ErrorCatch(hl.DeleteOpinionRequest)))
+
 	simple.POST("/v1/opinion/:id/feedback", (hl.ErrorCatch(hl.HandleOpinionFeedbackRequest)))
 
 	httpPort := ila.config.Dependencies["port"].(string)
