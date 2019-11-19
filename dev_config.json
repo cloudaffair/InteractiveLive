@@ -8,6 +8,13 @@
         "username":""
       }
     ],
+    "medialive":[
+      {
+        "region" :"us-east-1",
+        "access_key":"**",
+        "secret_key":"**"
+      }
+    ],
     "elastic_server":[
       "http://xxxx:9200"
       ],
