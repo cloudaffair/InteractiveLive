@@ -60,7 +60,7 @@ func HandleOpinionRequest(c context.Context, opinion model.Opinion, config *comm
 	return opinionResponse, nil
 }
 
-func DeleteOpinionRequest(c context.Context, opinionId string, config *common.Config, event model.LiveEvent) error {
+func DeleteOpinionRequest(opinionId string) error {
 	for _,scheduler := range schedulers {
 		jobs := scheduler.Jobs()
 		var opinionFound bool

@@ -118,17 +118,17 @@ func (h *Handler) DeleteOpinionRequest(ctx context.Context) error {
 	fmt.Println("Opinion request ", event)
 	switch partner {
 	case "elemental_live":
-		err := elementallive.DeleteOpinionRequest(ctx, opinionId, config, event)
+		err := elementallive.DeleteOpinionRequest(opinionId)
 		if err != nil {
 			return common.HttpErrorfCode(http.StatusInternalServerError, 8001, "%s", err)
 		}
-		c.JSON(http.StatusCreated, "Delete initiated")
+		c.JSON(http.StatusOK, "schedule deleted")
 	case "media_live":
 		err := medialive.DeleteOpinionRequest(ctx, opinionId, config, event)
 		if err != nil {
 			return common.HttpErrorfCode(http.StatusInternalServerError, 8001, "%s", err)
 		}
-		c.JSON(http.StatusCreated, "Delete initiated")
+		c.JSON(http.StatusOK, "schedule deleted")
 	default:
 		fmt.Errorf("Unknown partner  ", partner)
 		return common.HttpErrorfCode(http.StatusBadRequest, 8001, "%s", "Unknown partner", partner)
