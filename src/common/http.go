@@ -99,7 +99,6 @@ func doTimedRequest(ctx context.Context, req *http.Request) (*http.Response, err
 	if ctx != nil {
 		req = req.WithContext(ctx)
 	}
-	fmt.Println("Request fired as: ", req)
 	resp, httpErr := client.Do(req)
 
 	if httpErr == nil {
